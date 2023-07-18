@@ -1,0 +1,187 @@
+#include <stdio.h>
+#include <time.h>
+#include <sys/time.h>
+#include <pigpio.h>
+#include <stdlib.h>
+#include <signal.h>
+
+void main()
+{
+int i,j;
+struct timeval currTime, currTime1;
+struct tm lT , lT1;
+long prevSec;
+long prevMin;
+int ppm=0;
+int hph=0;
+int pulse[12],flag[12],led[12];
+int test[12];
+led[0]=25;
+led[1]=17;
+led[2]=5;
+led[3]=6;
+led[4]=12;
+led[5]=13;
+led[6]=19;
+led[7]=16;
+led[8]=26;
+led[9]=20;
+led[10]=21;
+led[11]=18;
+/*
+pulse[0]=500;
+pulse[1]=1500;
+pulse[2]=500;
+pulse[3]=1500;
+pulse[4]=500;
+pulse[5]=1500;
+pulse[6]=500;
+pulse[7]=1500;
+pulse[8]=500;
+pulse[9]=1500;
+pulse[10]=500;
+pulse[11]=1500;
+
+flag[0]=1;
+flag[1]=1;
+flag[2]=1;
+flag[3]=1;
+flag[4]=1;
+flag[5]=1;
+flag[6]=1;
+flag[7]=1;
+flag[8]=1;
+flag[9]=1;
+flag[10]=1;
+flag[11]=1;*/
+
+  for(i=0;i<12;i++){
+    printf("Enter pusle width (0-2000) of %d led: ",i+1);
+    scanf("%d",&pulse[i]);
+    printf("Enter 1 for pph and 2 for ppm: ");
+    scanf("%d",&flag[i]);
+    test[i]=0;
+  }
+
+  gettimeofday(&currTime,NULL);
+  lT = *localtime(&currTime.tv_sec);
+  long int millsec1, millsec2;
+  if(gpioInitialise()<0){
+    exit(1);
+  }
+
+  for(i=0;i<12;i++){
+    gpioSetMode(led[i], PI_OUTPUT);
+  }
+
+  while(1)
+  {
+    ppm =0;
+    hph=0;
+    prevSec = lT.tm_sec;
+    prevMin = lT.tm_min;
+    gettimeofday(&currTime, NULL);
+    lT = *localtime(&currTime.tv_sec);
+
+    // Capture of per hour change
+    // now from 28 pulse will be on for (2000 - pulse width) and at 30 min it will be synced
+    if(prevMin == 28 && lT.tm_min == 29 && lT.tm_sec == 0)
+    {  
+        printf("half past hour \n ");
+       
+        // In This for min 29 upto 30 min 120(0-58) seconds will come. AT 58th second led will glow as per pulse width provided
+        while(lT.tm_min == 29)
+        {
+          gettimeofday(&currTime1, NULL);
+          lT1 = *localtime(&currTime1.tv_sec);
+               
+            if( lT1.tm_sec == 58)  
+            {      
+                //printf("in if 1");            
+                 
+                while(lT1.tm_sec >= 58) {  
+                //printf("in while");  
+                millsec1 = currTime1.tv_usec/1000;
+                       
+                for(i=0;i<12;i++){
+                  if(lT1.tm_sec==59 && pulse[i]<=1000 && flag[i]==1){
+                      //printf("in if 2");
+                      test[i]=1;
+                      pulse[i]+=1000;
+                  }
+                  if(millsec1 == 2000 - pulse[i] && flag[i]==1)//falg 1 is for led working per hour (user entered)
+                  {
+                      gpioWrite(led[i],1);                                                              
+                  }
+                  //printf("%d\n",millsec1);  
+                }
+         
+         
+                gettimeofday(&currTime1, NULL);
+                lT1 = *localtime(&currTime1.tv_sec);        
+              }
+              printf("pph \n");
+
+              for(i=0;i<12;i++){    
+              gpioWrite(led[i],0);
+              if(test[i]==1){
+              pulse[i]=pulse[i]-1000;
+              test[i]=0;
+              }}
+          }
+          gettimeofday(&currTime, NULL);
+          lT = *localtime(&currTime.tv_sec);}
+            ppm =0;
+            hph =0;
+    }
+   
+    if(prevSec == 57 && lT.tm_sec == 58 )//capture per minute
+    {
+       printf("per minute caught \n ");
+          // printf("local time - %d:%d:%d\n", lT.tm_hour,lT.tm_min, lT.tm_sec);
+     
+          gettimeofday(&currTime1, NULL);
+          lT1 = *localtime(&currTime1.tv_sec);
+
+          // printf("local time1 - %d:%d:%d\n", lT1.tm_hour,lT1.tm_min, lT1.tm_sec);
+          // when sec = 0 then our time should be synced
+       
+          ppm =0;
+
+          //every minute, at 58 seconds, led will start glowing as per pulse width provided and switch off at 60s.
+          while(lT1.tm_sec >= 58)
+          {  
+              millsec2 = currTime1.tv_usec/1000;
+                       
+              for(i=0;i<12;i++){
+                if(lT1.tm_sec==59 && pulse[i]<=1000 && flag[i]==2)
+                {
+                    //printf("in if");
+                    test[i]=1;
+                    pulse[i]+=1000;
+                }
+                if(millsec2 == 2000 - pulse[i] && flag[i]==2)//flag 2 is for led working per minute (user entered)
+                {
+                    gpioWrite(led[i],1);                                                              
+                }  
+              }
+         
+         
+          gettimeofday(&currTime1, NULL);
+          lT1 = *localtime(&currTime1.tv_sec);        
+     
+          }
+          printf("ppm \n");
+          ppm =0;    
+          for(i=0;i<12;i++){    
+          gpioWrite(led[i],0);
+          if(test[i]==1){
+          pulse[i]=pulse[i]-1000;
+          test[i]=0;
+          }
+          }
+
+    }
+  }
+gpioTerminate();
+}
